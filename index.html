@@ -27,11 +27,13 @@
   .card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
   .card-title { font-size: 14px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
-  .price-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 0 32px 0; }
+  .price-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; padding: 0 32px 0; }
+  .est-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(139,92,246,0.15); color: #a78bfa; font-weight: 600; letter-spacing: 0.5px; }
+  .apsp-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(236,72,153,0.15); color: #f472b6; font-weight: 600; letter-spacing: 0.5px; }
   .price-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
   .price-label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
   .live-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(34,197,94,0.15); color: var(--green); font-weight: 600; letter-spacing: 0.5px; }
-  .price-value { font-size: 42px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .price-value { font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .price-change { font-size: 15px; margin-top: 4px; font-weight: 500; }
   .up { color: var(--green); }
   .down { color: var(--red); }
@@ -105,6 +107,16 @@
     <div class="price-value" id="wtiPrice">--</div>
     <div class="price-change" id="wtiChange">--</div>
   </div>
+  <div class="price-card">
+    <div class="price-label">Dubai Fateh <span class="est-badge">EST</span></div>
+    <div class="price-value" id="dubaiPrice">--</div>
+    <div class="price-change" id="dubaiChange">--</div>
+  </div>
+  <div class="price-card">
+    <div class="price-label">IMF APSP <span class="apsp-badge">INDEX</span></div>
+    <div class="price-value" id="apspPrice">--</div>
+    <div class="price-change" id="apspChange">--</div>
+  </div>
 </div>
 
 <!-- Intraday Chart + News -->
@@ -160,58 +172,49 @@ function formatChange(curr, prev) {
 }
 
 function buildIntradayChart(rt) {
-  const brentData = (rt.brent && rt.brent.intraday) || [];
-  const wtiData = (rt.wti && rt.wti.intraday) || [];
+  const series = {
+    brent:  { data: (rt.brent && rt.brent.intraday) || [],  color: '#f59e0b', label: 'Brent' },
+    wti:    { data: (rt.wti && rt.wti.intraday) || [],      color: '#3b82f6', label: 'WTI' },
+    dubai:  { data: (rt.dubai && rt.dubai.intraday) || [],   color: '#a78bfa', label: 'Dubai Fateh' },
+    apsp:   { data: (rt.apsp && rt.apsp.intraday) || [],    color: '#ec4899', label: 'IMF APSP' },
+  };
 
-  if (!brentData.length && !wtiData.length) return;
+  // Collect all timestamps
+  const allTimeSets = Object.values(series).map(s => s.data.map(d => d.time));
+  const allTimes = [...new Set(allTimeSets.flat())].sort();
+  if (!allTimes.length) return;
 
-  // Merge timestamps and align
-  const allTimes = [...new Set([...brentData.map(d => d.time), ...wtiData.map(d => d.time)])].sort();
-  const brentMap = Object.fromEntries(brentData.map(d => [d.time, d.value]));
-  const wtiMap = Object.fromEntries(wtiData.map(d => [d.time, d.value]));
+  // Build lookup maps
+  const maps = {};
+  for (const [key, s] of Object.entries(series)) {
+    maps[key] = Object.fromEntries(s.data.map(d => [d.time, d.value]));
+  }
 
-  // Format labels: show date on first point of each day, time otherwise
+  // Format labels: show date on first point of each day
   let lastDate = '';
   const labels = allTimes.map(t => {
     const [date, time] = t.split(' ');
-    if (date !== lastDate) {
-      lastDate = date;
-      return date + '\n' + time;
-    }
+    if (date !== lastDate) { lastDate = date; return date + '\n' + time; }
     return time;
   });
 
+  const datasets = Object.entries(series).map(([key, s]) => ({
+    label: s.label,
+    data: allTimes.map(t => maps[key][t] ?? null),
+    borderColor: s.color,
+    backgroundColor: s.color + '10',
+    borderWidth: key === 'apsp' ? 2.5 : 1.5,
+    borderDash: key === 'dubai' ? [4, 3] : key === 'apsp' ? [8, 4] : [],
+    pointRadius: 0,
+    pointHitRadius: 8,
+    fill: false,
+    tension: 0.2,
+    spanGaps: true,
+  }));
+
   const cfg = {
     type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Brent',
-          data: allTimes.map(t => brentMap[t] ?? null),
-          borderColor: '#f59e0b',
-          backgroundColor: 'rgba(245,158,11,0.06)',
-          borderWidth: 1.5,
-          pointRadius: 0,
-          pointHitRadius: 8,
-          fill: true,
-          tension: 0.2,
-          spanGaps: true,
-        },
-        {
-          label: 'WTI',
-          data: allTimes.map(t => wtiMap[t] ?? null),
-          borderColor: '#3b82f6',
-          backgroundColor: 'rgba(59,130,246,0.06)',
-          borderWidth: 1.5,
-          pointRadius: 0,
-          pointHitRadius: 8,
-          fill: true,
-          tension: 0.2,
-          spanGaps: true,
-        },
-      ]
-    },
+    data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -227,12 +230,7 @@ function buildIntradayChart(rt) {
       },
       scales: {
         x: {
-          ticks: {
-            color: '#8b8fa3',
-            maxTicksLimit: 16,
-            maxRotation: 0,
-            font: { size: 11 },
-          },
+          ticks: { color: '#8b8fa3', maxTicksLimit: 16, maxRotation: 0, font: { size: 11 } },
           grid: { color: '#2a2d3a' },
         },
         y: {
@@ -246,7 +244,6 @@ function buildIntradayChart(rt) {
   if (priceChart) priceChart.destroy();
   priceChart = new Chart(document.getElementById('priceChart'), cfg);
 
-  // Range label
   if (allTimes.length) {
     document.getElementById('chartRange').textContent = `${allTimes[0]} — ${allTimes[allTimes.length - 1]}`;
   }
@@ -311,6 +308,8 @@ async function refresh() {
     for (const [key, priceId, changeId] of [
       ['brent', 'brentPrice', 'brentChange'],
       ['wti', 'wtiPrice', 'wtiChange'],
+      ['dubai', 'dubaiPrice', 'dubaiChange'],
+      ['apsp', 'apspPrice', 'apspChange'],
     ]) {
       const live = rt[key];
       if (live && live.price && live.prev_close) {

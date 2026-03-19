@@ -218,6 +218,39 @@ def fetch_conflict_alerts():
     return accepted
 
 
+def compute_dubai_ratio():
+    """Compute Dubai/Brent price ratio from recent FRED monthly data."""
+    try:
+        dubai = fetch_fred_series("POILDUBUSDM", limit=6)
+        brent_m = fetch_fred_series("POILBREUSDM", limit=6)
+        if not dubai or not brent_m:
+            return 0.97  # fallback
+        # Average ratio over available months
+        dubai_map = {d["date"]: d["value"] for d in dubai}
+        ratios = []
+        for b in brent_m:
+            if b["date"] in dubai_map and b["value"] > 0:
+                ratios.append(dubai_map[b["date"]] / b["value"])
+        return sum(ratios) / len(ratios) if ratios else 0.97
+    except Exception as e:
+        print(f"[FRED] Error computing Dubai ratio: {e}")
+        return 0.97
+
+
+# Cache the Dubai/Brent ratio (recompute at most once per hour)
+_dubai_ratio_cache = {"ratio": None, "timestamp": 0}
+
+
+def get_dubai_ratio():
+    """Get cached Dubai/Brent ratio, refreshing hourly."""
+    now = datetime.now().timestamp()
+    if _dubai_ratio_cache["ratio"] is None or now - _dubai_ratio_cache["timestamp"] > 3600:
+        _dubai_ratio_cache["ratio"] = compute_dubai_ratio()
+        _dubai_ratio_cache["timestamp"] = now
+        print(f"[Dubai] Ratio updated: {_dubai_ratio_cache['ratio']:.4f}")
+    return _dubai_ratio_cache["ratio"]
+
+
 def get_dashboard_data():
     """Assemble all dashboard data."""
     news = fetch_conflict_alerts()
@@ -229,11 +262,51 @@ def get_dashboard_data():
         if rt and rt["price"]:
             realtime[name] = rt
 
+    # Estimate Dubai Fateh from Brent using historical ratio
+    dubai_ratio = get_dubai_ratio()
+    brent_rt = realtime.get("brent")
+    if brent_rt and brent_rt.get("intraday"):
+        dubai_intraday = [
+            {"timestamp": p["timestamp"], "time": p["time"], "value": round(p["value"] * dubai_ratio, 2)}
+            for p in brent_rt["intraday"]
+        ]
+        dubai_price = round(brent_rt["price"] * dubai_ratio, 2)
+        dubai_prev = round(brent_rt["prev_close"] * dubai_ratio, 2) if brent_rt.get("prev_close") else None
+        realtime["dubai"] = {
+            "price": dubai_price,
+            "prev_close": dubai_prev,
+            "intraday": dubai_intraday,
+            "estimated": True,
+            "ratio": round(dubai_ratio, 4),
+        }
+
+    # Compute APSP (IMF oil price index) = simple average of Brent, WTI, Dubai
+    apsp = None
+    apsp_prev = None
+    if all(realtime.get(k, {}).get("price") for k in ["brent", "wti", "dubai"]):
+        apsp = round((realtime["brent"]["price"] + realtime["wti"]["price"] + realtime["dubai"]["price"]) / 3, 2)
+        if all(realtime.get(k, {}).get("prev_close") for k in ["brent", "wti", "dubai"]):
+            apsp_prev = round((realtime["brent"]["prev_close"] + realtime["wti"]["prev_close"] + realtime["dubai"]["prev_close"]) / 3, 2)
+        # Build APSP intraday from component series
+        brent_intra = {p["time"]: p["value"] for p in realtime["brent"]["intraday"]}
+        wti_intra = {p["time"]: p["value"] for p in realtime["wti"]["intraday"]}
+        dubai_intra = {p["time"]: p["value"] for p in realtime["dubai"]["intraday"]}
+        all_times = sorted(set(brent_intra) & set(wti_intra) & set(dubai_intra))
+        apsp_intraday = [
+            {"time": t, "value": round((brent_intra[t] + wti_intra[t] + dubai_intra[t]) / 3, 2)}
+            for t in all_times
+        ]
+        realtime["apsp"] = {
+            "price": apsp,
+            "prev_close": apsp_prev,
+            "intraday": apsp_intraday,
+        }
+
     # 5% intraday alert: compare current real-time price vs previous close
     alerts = []
-    for key, label in [("brent", "Brent"), ("wti", "WTI")]:
+    for key, label in [("brent", "Brent"), ("wti", "WTI"), ("dubai", "Dubai Fateh"), ("apsp", "IMF APSP")]:
         rt = realtime.get(key)
-        if rt and rt["price"] and rt["prev_close"]:
+        if rt and rt.get("price") and rt.get("prev_close"):
             prev = rt["prev_close"]
             curr = rt["price"]
             pct = ((curr - prev) / prev) * 100
