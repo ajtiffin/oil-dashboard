@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oil Price Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --border: #2a2d3a;
+    --text: #e1e4ed; --muted: #8b8fa3; --green: #22c55e;
+    --red: #ef4444; --blue: #3b82f6; --orange: #f59e0b;
+    --amber-bg: #451a03; --amber-border: #92400e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 22px; font-weight: 600; }
+  .header h1 span { color: var(--orange); }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .grid { display: grid; grid-template-columns: 1fr; gap: 20px; padding: 24px 32px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
+  .card-title { font-size: 14px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .price-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 0 32px 0; }
+  .price-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+  .price-label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .live-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(34,197,94,0.15); color: var(--green); font-weight: 600; letter-spacing: 0.5px; }
+  .price-value { font-size: 42px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .price-change { font-size: 15px; margin-top: 4px; font-weight: 500; }
+  .up { color: var(--green); }
+  .down { color: var(--red); }
+
+  .chart-container { position: relative; height: 380px; }
+
+  /* Alert banner */
+  .alert-banner { margin: 20px 32px 0; padding: 16px 20px; background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: 10px; display: none; }
+  .alert-banner.active { display: flex; align-items: flex-start; gap: 12px; }
+  .alert-icon { font-size: 22px; flex-shrink: 0; }
+  .alert-title { font-weight: 600; color: var(--orange); margin-bottom: 4px; }
+  .alert-detail { font-size: 14px; color: #fbbf24; }
+
+  /* Conflict alerts feed */
+  .alert-feed { list-style: none; max-height: 450px; overflow-y: auto; }
+  .alert-item { padding: 12px 14px; border-left: 3px solid var(--border); margin-bottom: 8px; border-radius: 0 6px 6px 0; background: rgba(255,255,255,0.02); }
+  .alert-item.sev-critical { border-left-color: #ef4444; background: rgba(239,68,68,0.06); }
+  .alert-item.sev-high { border-left-color: #f59e0b; background: rgba(245,158,11,0.05); }
+  .alert-item.sev-medium { border-left-color: #3b82f6; background: rgba(59,130,246,0.04); }
+  .alert-item.sev-low { border-left-color: var(--border); }
+  .alert-item a { color: var(--text); text-decoration: none; font-size: 13px; line-height: 1.5; display: block; }
+  .alert-item a:hover { color: var(--blue); }
+  .alert-item-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .sev-badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .sev-badge.critical { background: rgba(239,68,68,0.2); color: #fca5a5; }
+  .sev-badge.high { background: rgba(245,158,11,0.2); color: #fcd34d; }
+  .sev-badge.medium { background: rgba(59,130,246,0.2); color: #93c5fd; }
+  .sev-badge.low { background: rgba(139,143,163,0.15); color: var(--muted); }
+  .tag { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(139,143,163,0.12); color: var(--muted); }
+  .alert-source { font-size: 11px; color: var(--muted); }
+  .alert-time { font-size: 11px; color: var(--muted); }
+
+  .loading { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--muted); }
+
+  /* Toast notifications */
+  .toast-container { position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
+  .toast { padding: 14px 20px; border-radius: 10px; font-size: 14px; font-weight: 500; animation: slideIn 0.3s ease; max-width: 380px; }
+  .toast-alert { background: #7f1d1d; border: 1px solid #dc2626; color: #fca5a5; }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>&#9679;</span> Oil Price Dashboard</h1>
+  <div class="status">
+    <div class="status-dot"></div>
+    <span id="lastUpdate">Loading...</span>
+    <span style="margin-left: 12px; font-size: 12px;">Auto-refresh: 5 min</span>
+  </div>
+</div>
+
+<!-- 5% Move Alert Banner -->
+<div class="alert-banner" id="alertBanner">
+  <div class="alert-icon">&#9888;</div>
+  <div>
+    <div class="alert-title">5%+ Intraday Price Movement Detected</div>
+    <div class="alert-detail" id="alertDetail"></div>
+  </div>
+</div>
+
+<!-- Price Cards -->
+<div class="price-row" style="margin-top: 20px;">
+  <div class="price-card">
+    <div class="price-label">Brent Crude <span class="live-badge">LIVE</span></div>
+    <div class="price-value" id="brentPrice">--</div>
+    <div class="price-change" id="brentChange">--</div>
+  </div>
+  <div class="price-card">
+    <div class="price-label">WTI Crude <span class="live-badge">LIVE</span></div>
+    <div class="price-value" id="wtiPrice">--</div>
+    <div class="price-change" id="wtiChange">--</div>
+  </div>
+</div>
+
+<!-- Intraday Chart + News -->
+<div class="grid">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Intraday Prices (2 days, 5-min)</span>
+      <span class="card-title" id="chartRange"></span>
+    </div>
+    <div class="chart-container">
+      <canvas id="priceChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Iran &amp; Supply Disruption Alerts</span>
+      <span class="card-title" id="alertCount"></span>
+    </div>
+    <div class="alert-feed" id="alertFeed">
+      <div class="loading">Scanning feeds...</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+let priceChart;
+let previousAlerts = [];
+
+function showToast(msg) {
+  const container = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast toast-alert';
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 10000);
+  if (Notification.permission === 'granted') {
+    new Notification('Oil Price Alert', { body: msg });
+  }
+}
+
+function formatPrice(v) {
+  return '$' + v.toFixed(2);
+}
+
+function formatChange(curr, prev) {
+  const pct = ((curr - prev) / prev * 100);
+  const sign = pct >= 0 ? '+' : '';
+  const arrow = pct >= 0 ? '\u25B2' : '\u25BC';
+  return { text: `${arrow} ${sign}${pct.toFixed(2)}% (${sign}$${(curr - prev).toFixed(2)}) today`, cls: pct >= 0 ? 'up' : 'down', pct };
+}
+
+function buildIntradayChart(rt) {
+  const brentData = (rt.brent && rt.brent.intraday) || [];
+  const wtiData = (rt.wti && rt.wti.intraday) || [];
+
+  if (!brentData.length && !wtiData.length) return;
+
+  // Merge timestamps and align
+  const allTimes = [...new Set([...brentData.map(d => d.time), ...wtiData.map(d => d.time)])].sort();
+  const brentMap = Object.fromEntries(brentData.map(d => [d.time, d.value]));
+  const wtiMap = Object.fromEntries(wtiData.map(d => [d.time, d.value]));
+
+  // Format labels: show date on first point of each day, time otherwise
+  let lastDate = '';
+  const labels = allTimes.map(t => {
+    const [date, time] = t.split(' ');
+    if (date !== lastDate) {
+      lastDate = date;
+      return date + '\n' + time;
+    }
+    return time;
+  });
+
+  const cfg = {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Brent',
+          data: allTimes.map(t => brentMap[t] ?? null),
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245,158,11,0.06)',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHitRadius: 8,
+          fill: true,
+          tension: 0.2,
+          spanGaps: true,
+        },
+        {
+          label: 'WTI',
+          data: allTimes.map(t => wtiMap[t] ?? null),
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59,130,246,0.06)',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHitRadius: 8,
+          fill: true,
+          tension: 0.2,
+          spanGaps: true,
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8b8fa3', usePointStyle: true, padding: 20 } },
+        tooltip: {
+          callbacks: {
+            title: (items) => allTimes[items[0].dataIndex],
+            label: ctx => `${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: '#8b8fa3',
+            maxTicksLimit: 16,
+            maxRotation: 0,
+            font: { size: 11 },
+          },
+          grid: { color: '#2a2d3a' },
+        },
+        y: {
+          ticks: { color: '#8b8fa3', callback: v => '$' + v },
+          grid: { color: '#2a2d3a' },
+        }
+      }
+    }
+  };
+
+  if (priceChart) priceChart.destroy();
+  priceChart = new Chart(document.getElementById('priceChart'), cfg);
+
+  // Range label
+  if (allTimes.length) {
+    document.getElementById('chartRange').textContent = `${allTimes[0]} — ${allTimes[allTimes.length - 1]}`;
+  }
+}
+
+function renderAlerts(items) {
+  const feed = document.getElementById('alertFeed');
+  const countEl = document.getElementById('alertCount');
+
+  if (!items.length) { feed.innerHTML = '<div class="loading">No active alerts</div>'; countEl.textContent = ''; return; }
+
+  const critCount = items.filter(i => i.severity === 'critical').length;
+  const highCount = items.filter(i => i.severity === 'high').length;
+  countEl.textContent = `${critCount ? critCount + ' critical, ' : ''}${highCount} high — ${items.length} total`;
+
+  feed.innerHTML = items.map(item => {
+    const timeStr = item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    const tags = (item.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
+    return `
+      <div class="alert-item sev-${item.severity}">
+        <a href="${item.link}" target="_blank" rel="noopener">${item.title}</a>
+        <div class="alert-item-meta">
+          <span class="sev-badge ${item.severity}">${item.severity}</span>
+          ${tags}
+          ${item.source ? `<span class="alert-source">${item.source}</span>` : ''}
+          ${timeStr ? `<span class="alert-time">${timeStr}</span>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function handleAlerts(alerts) {
+  const banner = document.getElementById('alertBanner');
+  const detail = document.getElementById('alertDetail');
+
+  if (alerts.length) {
+    banner.classList.add('active');
+    detail.innerHTML = alerts.map(a =>
+      `<strong>${a.commodity}</strong>: ${a.pct > 0 ? '+' : ''}${a.pct}% today vs prev close ($${a.prev.toFixed(2)} → $${a.curr.toFixed(2)})`
+    ).join('<br>');
+
+    const newKeys = alerts.map(a => `${a.commodity}-${a.date}`);
+    const oldKeys = previousAlerts.map(a => `${a.commodity}-${a.date}`);
+    for (let i = 0; i < alerts.length; i++) {
+      if (!oldKeys.includes(newKeys[i])) {
+        showToast(`${alerts[i].commodity} moved ${alerts[i].pct > 0 ? '+' : ''}${alerts[i].pct}% — $${alerts[i].prev.toFixed(2)} → $${alerts[i].curr.toFixed(2)}`);
+      }
+    }
+    previousAlerts = alerts;
+  } else {
+    banner.classList.remove('active');
+  }
+}
+
+async function refresh() {
+  try {
+    const resp = await fetch('/api/data');
+    const data = await resp.json();
+    const rt = data.realtime || {};
+
+    // Price cards
+    for (const [key, priceId, changeId] of [
+      ['brent', 'brentPrice', 'brentChange'],
+      ['wti', 'wtiPrice', 'wtiChange'],
+    ]) {
+      const live = rt[key];
+      if (live && live.price && live.prev_close) {
+        document.getElementById(priceId).textContent = formatPrice(live.price);
+        const chg = formatChange(live.price, live.prev_close);
+        const chgEl = document.getElementById(changeId);
+        chgEl.textContent = chg.text;
+        chgEl.className = 'price-change ' + chg.cls;
+      }
+    }
+
+    buildIntradayChart(rt);
+    renderAlerts(data.news);
+    handleAlerts(data.alerts);
+
+    document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    document.getElementById('lastUpdate').textContent = 'Error: ' + e.message;
+  }
+}
+
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+
+refresh();
+setInterval(refresh, 5 * 60 * 1000);
+</script>
+</body>
+</html>
