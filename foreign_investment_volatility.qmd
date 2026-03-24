@@ -1,0 +1,271 @@
+---
+title: "Foreign Investment and Emerging Market Volatility: A Theoretical Case for the S-Curve"
+author: "Andrew Tiffin"
+date: today
+format:
+  typst:
+    toc: true
+    toc-depth: 3
+    section-numbering: "1.1.1"
+    margin:
+      x: 2.5cm
+      y: 3cm
+    fontsize: 11pt
+    mainfont: "New Computer Modern"
+bibliography: references.bib
+---
+
+# Introduction
+
+A long-standing question in international finance is whether foreign investment
+stabilises emerging market (EM) financial systems or destabilises them. The
+naive conjecture — more foreign capital, lower volatility — finds partial
+empirical support but no clean theoretical foundation. This note argues that the
+relationship between foreign investment and EM volatility is nonlinear,
+approximating a logistic (S-shaped) curve, and provides three independent
+theoretical justifications for that form.
+
+The empirical motivation is straightforward. Studies such as @bekaert2000 find
+that capital market liberalisation eventually reduces volatility, but only after
+an initial period in which effects are muted or even reversed. FDI inflows are
+linked to larger, more liquid stock markets in developing countries
+[@soumre2015], with deeper liquidity indirectly dampening volatility. Yet
+aggressive foreign portfolio flows can increase commonality in liquidity —
+systematic liquidity risk — particularly during stress events. The data are
+consistent with a relationship that is weak at low investment levels, steep at
+intermediate levels, and flat at high levels: precisely the logistic form.
+
+The remainder of this note formalises this intuition. Section 2 presents the
+baseline model. Sections 3 through 5 provide three theoretical mechanisms — from
+market microstructure, financial development theory, and network/coordination
+theory — each of which independently generates the S-curve. Section 6 discusses
+the fourth regime (beyond the plateau) and Section 7 concludes.
+
+---
+
+# The Baseline Model
+
+Let $F_t \in [0, 1]$ denote the foreign investment share of the domestic market
+at time $t$, and let $\sigma_t$ denote market volatility. The conjecture is that
+the stabilising effect of foreign investment follows a declining logistic:
+
+$$
+\sigma_t = \sigma_{\min} + (\sigma_{\max} - \sigma_{\min}) \cdot \frac{1}{1 + e^{\,k(F_t - F^*)}} + \varepsilon_t
+\tag{1}
+$$
+
+where:
+
+- $\sigma_{\min} > 0$ is the volatility floor — irreducible emerging market fundamental risk,
+- $\sigma_{\max}$ is volatility in the absence of stabilising foreign investment,
+- $F^*$ is the inflection point, the critical foreign investment share at which volatility falls most rapidly,
+- $k > 0$ governs the steepness of the transition.
+
+As $F_t \to 0$, $\sigma_t \to \sigma_{\max}$. As $F_t \to 1$, $\sigma_t \to \sigma_{\min}$.
+The maximum rate of decline occurs at $F_t = F^*$.
+
+![The logistic relationship between foreign investment share and emerging market volatility. The inflection point $F^*$ marks the critical mass at which stabilising effects are most rapid. The floor $\sigma_{\min}$ reflects irreducible fundamental risk. The dotted upturn in Regime IV illustrates rising global co-movement risk at full integration.](scurve.svg){#fig-scurve width=95%}
+
+Three theoretical mechanisms independently justify the existence of $F^*$ and
+the S-shaped transition. They are likely complements — all three operating
+simultaneously would sharpen the inflection — but each is sufficient on its own.
+
+---
+
+# Mechanism I: Market Microstructure and the Critical Mass for Price Discovery
+
+## Kyle's Framework Extended to Thin Markets
+
+@kyle1985 provides the cleanest microfoundation. In Kyle's model, a strategic
+informed trader submits a market order; a competitive market maker sets prices
+based on the aggregate order flow; and noise traders provide camouflage that
+allows the informed trader to profit. The equilibrium bid-ask spread and price
+impact coefficient depend on the ratio of informed to noise order flow.
+
+In an emerging market context, foreign institutional investors are the informed
+traders: they bring superior information processing, longer investment horizons,
+and the ability to arbitrage mispricing against global benchmarks. Domestic
+retail investors are the noise traders. The key extension is that the stabilising
+effect of informed foreign order flow is non-linear in the quantity of that flow.
+
+## The Phase Transition
+
+Define $\lambda$ as the proportion of order flow attributable to foreign
+(informed) investors. Market makers update their beliefs about the information
+content of order flow according to Bayes' rule. When $\lambda$ is small, the
+signal-to-noise ratio in aggregate order flow is low; market makers cannot
+distinguish informed from noise trades; they set wide spreads defensively; and
+noise trader dynamics dominate price movements — volatility remains high.
+
+There exists a critical threshold $\lambda^*$ above which the information content
+of order flow is sufficient for market makers to statistically identify informed
+trades. Above $\lambda^*$, spreads tighten rapidly, price discovery improves, and
+noise trader influence on prices diminishes. Below $\lambda^*$, marginal foreign
+entry has essentially no effect on market quality. The transition from
+noise-dominated to information-dominated pricing is a phase transition, not a
+smooth linear process.
+
+Once liquidity saturates — order book depth is sufficient that marginal foreign
+participation adds no additional price-discovery benefit — the volatility
+reduction reaches a floor: the plateau in equation (1).
+
+This mechanism maps directly onto the logistic form: the cumulative effect of
+moving from $\lambda < \lambda^*$ to $\lambda > \lambda^*$ is S-shaped in
+$F_t$, with $F^* \propto \lambda^*$.
+
+---
+
+# Mechanism II: Financial Development Theory and Fixed Cost Thresholds
+
+## Greenwood–Jovanovic and Institutional Complementarities
+
+@greenwood1990 establish that financial intermediation and economic development
+co-evolve through a process of threshold crossing and self-reinforcement. The
+core argument is that financial infrastructure has fixed costs: clearing and
+settlement systems, custody arrangements, regulatory frameworks, analyst
+coverage, and corporate governance norms. Below a threshold of market activity,
+the fixed costs cannot be justified; above it, they can.
+
+Applied to foreign investment and market stability, the logic is:
+
+1. **Low $F_t$**: Foreign inflows are insufficient to justify the fixed costs of
+   institutional development. Market infrastructure remains thin.
+   Intermediaries cannot efficiently price and distribute risk. Volatility
+   is high, and marginal foreign entry has little stabilising effect.
+
+2. **Intermediate $F_t$**: A threshold is crossed. Foreign capital is now
+   large enough to justify the fixed costs. Once institutions develop,
+   complementarities amplify the effect:
+   - Foreign capital → demand for better governance and transparency
+   - Better governance → more foreign capital
+   - More capital → analyst coverage, hedging instruments, deeper markets
+
+   This positive feedback loop generates the rapid central section of the
+   S-curve: the transition self-accelerates until the gains are exhausted.
+
+3. **High $F_t$**: Institutional development saturates. The market has
+   reached the frontier of what institutional improvement can deliver.
+   Volatility plateaus at $\sigma_{\min}$.
+
+## Empirical Calibration of the Threshold
+
+@bekaert2000 find that the volatility-reducing effects of capital market
+liberalisation are muted until foreign portfolio shares reach approximately
+10–20 percent of market capitalisation — consistent with a non-trivial $F^*$ in
+equation (1). Below this level, liberalisation has ambiguous or negligible
+effects on volatility; above it, effects are rapid and economically significant.
+
+@borensztein1998 introduce a related concept — absorptive capacity — in the
+context of FDI and growth: the stabilising effect of foreign investment requires
+domestic absorptive capacity (human capital, institutions, financial depth).
+Below a threshold of absorptive capacity, foreign investment can increase
+volatility by introducing flows that local markets cannot efficiently
+intermediate. If absorptive capacity is itself a function of cumulative
+investment, the dynamics over time trace an S-curve.
+
+---
+
+# Mechanism III: Network Effects and Coordination Tipping Points
+
+## The Granovetter Framework
+
+@granovetter1978 models collective behaviour as the outcome of a population of
+agents with heterogeneous thresholds for participation. Each agent joins a
+behaviour (here: committing as a long-term anchor investor in an emerging market)
+if and only if the fraction of others already committed exceeds their personal
+threshold. The equilibrium is determined by the intersection of the cumulative
+threshold distribution with the 45-degree line.
+
+## Application to EM Investor Coordination
+
+Foreign investors in emerging markets face a coordination problem. The stabilising
+benefits of long-term anchor investment — reduced fire-sale risk, lower liquidity
+premia, better governance outcomes — only materialise if *enough* other long-term
+investors are also present. If they are not, a long-term investor is stranded in
+an illiquid market when they need to exit, making short-term speculative
+behaviour individually rational regardless of preferences.
+
+The resulting structure is:
+
+- **Sub-critical mass**: Each foreign investor anticipates that others may not
+  stay. Hot-money behaviour is the best response. Volatility is high or unchanged
+  by new foreign entry.
+
+- **Tipping point $F^*$**: Enough long-term investors are present that commitment
+  becomes individually rational. The equilibrium flips from the bad (volatile)
+  to the good (stable) coordination equilibrium. Entry past the tipping point
+  triggers a cascade of further long-term commitment.
+
+- **Super-critical mass**: The stable coordination equilibrium is locked in.
+  Further foreign entry reinforces stability but with diminishing marginal effect
+  — the plateau.
+
+## The Logistic as Cumulative Threshold Distribution
+
+@granovetter1978 shows that when the distribution of agent thresholds is
+approximately normal (or, more generally, unimodal and symmetric), the
+cumulative threshold distribution — and thus the aggregate participation rate as
+a function of the environment — is approximately logistic. This provides a
+direct theoretical derivation of equation (1) from first principles about
+investor heterogeneity, without requiring any specific assumption about the shape
+of the stabilisation function. The logistic form is the natural outcome of
+aggregating over a population of investors with heterogeneous commitment
+thresholds.
+
+---
+
+# The Fourth Regime: Beyond the Plateau
+
+The three mechanisms above describe a monotonically declining relationship
+between $F_t$ and $\sigma_t$. A full treatment should acknowledge a fourth
+regime: at very high levels of foreign investment, when the domestic market is
+effectively fully integrated into global financial markets, a new volatility
+channel opens — **global co-movement risk**.
+
+At full integration:
+
+- Domestic asset prices are determined by global rather than local factors.
+- A global risk-off event triggers simultaneous foreign outflows from all
+  integrated markets, including the domestic one.
+- The diversification benefits of the domestic market to foreign investors
+  collapse toward zero, making capital flows highly sensitive to global
+  sentiment.
+
+@bekaert1997 document this phenomenon: liberalisation raises local market
+correlation with world markets, which can increase volatility from global shocks
+even as it reduces idiosyncratic local volatility. The net effect on total
+volatility is ambiguous and depends on the relative variance of global versus
+local shocks.
+
+Incorporating this fourth regime, the full relationship between $F_t$ and
+$\sigma_t$ is non-monotone: declining logistic up to the plateau ($F_t \lesssim
+F^{**}$), then potentially rising as global co-movement dominates. For most
+emerging markets that are not yet at full integration, the three-regime logistic
+in equation (1) is the empirically relevant portion of the curve.
+
+---
+
+# Conclusion
+
+The conjecture that foreign investment reduces emerging market volatility in a
+logistic (S-shaped) pattern has a coherent theoretical foundation. Three
+independent mechanisms — Kyle's microstructure threshold for informed order
+flow, Greenwood–Jovanovic's fixed cost and complementarity model, and
+Granovetter's coordination tipping point — each generate the S-curve
+independently. Their likely co-presence in practice sharpens the inflection
+point and justifies the logistic as the appropriate functional form.
+
+The parameters of equation (1) are empirically identifiable: $F^*$ (the
+inflection point), $k$ (steepness), $\sigma_{\min}$, and $\sigma_{\max}$ can
+in principle be estimated by NLS or Bayesian methods on panel data of EM
+foreign ownership shares and realised volatility measures. The theoretical
+prior from @bekaert2000 suggests $F^* \in [0.10, 0.20]$ for portfolio
+investment liberalisation, though the value will vary with market size,
+institutional quality, and global conditions.
+
+---
+
+# References {.unnumbered}
+
+::: {#refs}
+:::

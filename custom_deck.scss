@@ -1,0 +1,129 @@
+/*-- scss:defaults --*/
+
+$body-bg: #0a0e17;
+$body-color: #e8eaf0;
+$link-color: #00e5ff;
+$font-family-sans-serif: "Inter", "Helvetica Neue", Arial, sans-serif;
+
+$presentation-heading-font: "Inter", "Helvetica Neue", Arial, sans-serif;
+$presentation-heading-color: #e8eaf0;
+
+$code-color: #00e5ff;
+$code-bg: #131926;
+
+/*-- scss:rules --*/
+
+.reveal {
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  font-size: 20px;
+}
+
+.reveal .slides {
+  text-align: left;
+}
+
+.reveal .slides section {
+  padding: 10px 30px;
+}
+
+.reveal h1, .reveal h2, .reveal h3 {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: none;
+}
+
+.reveal h2 {
+  font-size: 1.2em;
+  color: #e8eaf0;
+  border-bottom: 2px solid #1a2035;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+.reveal .slide-background {
+  background-color: #0a0e17;
+}
+
+.reveal table {
+  font-size: 0.75em;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.reveal table th {
+  background: #131926;
+  color: #00e5ff;
+  border-bottom: 2px solid #00e5ff33;
+  padding: 10px 16px;
+  text-align: left;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.reveal table td {
+  padding: 8px 16px;
+  border-bottom: 1px solid #1a2035;
+  color: #e8eaf0;
+}
+
+.reveal table tr:hover td {
+  background: #131926;
+}
+
+.reveal .progress {
+  color: #00e5ff;
+  height: 3px;
+}
+
+.reveal .controls {
+  color: #5a627844;
+}
+
+.reveal .controls:hover {
+  color: #00e5ff;
+}
+
+.reveal blockquote {
+  border-left: 4px solid #ffd93d;
+  background: #131926;
+  padding: 15px 25px;
+  font-style: italic;
+  color: #5a6278;
+}
+
+.reveal ul, .reveal ol {
+  margin-top: 10px;
+}
+
+.reveal li {
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.reveal .fragment.visible {
+  opacity: 1;
+}
+
+.reveal .fragment {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.reveal section img {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.reveal .slide-number {
+  color: #5a6278;
+  font-size: 0.6em;
+  right: 20px;
+  bottom: 20px;
+}
+
+/* MathJax */
+.reveal .MathJax {
+  color: #e8eaf0 !important;
+}
