@@ -1,0 +1,546 @@
+---
+title: "Causal Forests with Fixed Effects"
+subtitle: "Node-Level Residualization for Heterogeneous Treatment Effects in Panel Data"
+author: "Andrew Tiffin"
+date: today
+format:
+  typst:
+    toc: true
+    toc-depth: 3
+    section-numbering: "1.1.1"
+    margin:
+      x: 2.5cm
+      y: 3cm
+    fontsize: 11pt
+    mainfont: "New Computer Modern"
+---
+
+# Introduction
+
+Standard causal inference gives you averages. The average treatment effect of a
+minimum wage hike on teen employment. The average impact of a policy reform on
+wages. These are useful numbers, but they are also comfortable fictions — they
+flatten distributional reality into a single point estimate, obscuring who
+benefits and who loses.
+
+Causal forests (Wager and Athey, 2018) were designed to crack this open. By
+adapting random forests to the treatment effect estimation problem, they recover
+the *conditional* average treatment effect (CATE) — how impacts vary across
+observable characteristics. But the original method was built for cross-sectional
+data. Applied to panel data without adaptation, the forest risks spending finite
+splitting capacity on variation driven by unit-level fixed effects rather than
+treatment effect heterogeneity. A sufficiently flexible forest with rich
+covariates can partially compensate — and standard causal forests have produced
+plausible results on macro panel data (e.g., Tiffin, 2019) — but the problem
+grows as fixed effect strength increases relative to treatment effect variation.
+
+Causal Forests with Fixed Effects (CFFE), developed by Kattenberg, Scheer, and
+Thiel (2023) at the CPB Netherlands Bureau for Economic Policy Analysis and
+implemented in Python by Aytug (2026), addresses this problem. The core
+innovation is *node-level residualization*: rather than demeaning the outcome once
+globally, CFFE removes unit and time fixed effects within each candidate tree
+node during the splitting process. This substantially reduces contamination from
+additive unit and time effects in split selection, so that splits are more likely
+to reflect treatment effect heterogeneity rather than variation in unobserved
+baseline levels. Causal interpretation of the resulting heterogeneity still
+requires the standard DiD identification assumptions — conditional parallel
+trends, no anticipation, and sufficient overlap — but the method removes a major
+source of nuisance variation that would otherwise distort the forest.
+
+This note explains the methodology, its mathematical foundations, and where it
+sits relative to the broader causal ML toolkit.
+
+---
+
+# Background
+
+## The Potential Outcomes Framework
+
+Let $Y_{it}(1)$ and $Y_{it}(0)$ denote the potential outcomes for unit $i$ at
+time $t$ under treatment and control respectively. The individual treatment
+effect is $\tau_{it} = Y_{it}(1) - Y_{it}(0)$, which is never directly observed
+— the fundamental problem of causal inference. The object of interest is the
+conditional average treatment effect:
+
+$$
+\tau(x) = \mathbb{E}[Y_{it}(1) - Y_{it}(0) \mid X_{it} = x]
+$$ {#eq-cate}
+
+This is the function that CFFE estimates: how the treatment effect varies with
+covariates $X$.
+
+## Two-Way Fixed Effects and Its Limits
+
+The workhorse model for panel data causal inference is the two-way fixed effects
+(TWFE) estimator:
+
+$$
+Y_{it} = \alpha_i + \gamma_t + \tau D_{it} + \varepsilon_{it}
+$$ {#eq-twfe}
+
+where $\alpha_i$ captures time-invariant unit heterogeneity, $\gamma_t$ captures
+common time shocks, and $D_{it}$ is a binary treatment indicator. Under parallel
+trends and a single treatment cohort, $\hat{\tau}$ identifies the average
+treatment effect on the treated (ATT) — though as we will see, this breaks down
+under staggered adoption with heterogeneous effects.
+
+The problem: $\tau$ is a scalar. TWFE tells you the average effect but nothing
+about how it varies. Recent work (de Chaisemartin and d'Haultfoeuille, 2020;
+Callaway and Sant'Anna, 2021; Sun and Abraham, 2021) has shown that TWFE can
+even get the average wrong under staggered adoption — the estimand becomes a
+potentially negative-weighted average of cohort-specific effects. These
+corrections recover clean group-time average effects (and allow structured
+heterogeneity analysis by group, time, or post-estimation aggregation), but none
+delivers the full nonparametric $\tau(x)$ function.
+
+## Causal Forests: The Cross-Sectional Case
+
+Wager and Athey (2018) introduced the generalized random forest (GRF) framework.
+For a randomized or conditionally-ignorable treatment, the causal forest
+estimates $\tau(x)$ by:
+
+1. Growing trees that split to maximize treatment effect heterogeneity
+2. Using *honest estimation*: one subsample determines tree structure, another
+   estimates leaf-level effects
+3. Aggregating across many trees to form a forest estimate with pointwise
+   asymptotic normality
+
+The splitting criterion targets $\tau$-heterogeneity directly. At each candidate
+split $S$ partitioning a parent node into children $\mathcal{L}$ and
+$\mathcal{R}$:
+
+$$
+\Delta(S) = \frac{n_{\mathcal{L}} \cdot n_{\mathcal{R}}}{n^2}
+\left(\hat{\tau}_{\mathcal{L}} - \hat{\tau}_{\mathcal{R}}\right)^2
+$$ {#eq-split}
+
+This works well cross-sectionally. The trouble starts with panel data.
+
+---
+
+# The Problem: Standard Causal Forests on Panel Data
+
+Consider the panel data model with heterogeneous treatment effects:
+
+$$
+Y_{it} = \alpha_i + \gamma_t + \tau(X_{it}) D_{it} + \varepsilon_{it}
+$$ {#eq-panel}
+
+Standard causal forests ignore $\alpha_i$ and $\gamma_t$ entirely. This creates
+two concerns, one theoretical and one practical.
+
+## Covariate--Fixed Effect Confounding
+
+If $X_{it}$ is correlated with $\alpha_i$ — as it almost always will be in
+practice — the forest splits on covariates that proxy for baseline levels rather
+than treatment effect variation. Units with high $\alpha_i$ appear to respond
+more to treatment simply because their outcomes are elevated, not because the
+treatment actually affects them differently.
+
+That said, a sufficiently flexible forest with rich covariates can partially
+compensate. If the covariates capture enough of the unit-level heterogeneity, the
+forest effectively controls for fixed effects through its splits. Standard causal
+forests have produced plausible results on macro panel data without explicit FE
+removal (Tiffin, 2019). The severity of the problem depends on the ratio of
+fixed effect variation to treatment effect variation: when FE are modest relative
+to the signal of interest, standard forests can work.
+
+## Residual Correlation as a Specification Diagnostic
+
+This points to a useful — though limited — practical diagnostic. If the model is
+flexible enough that the residuals show no serial correlation (within units) and
+no cross-sectional correlation (across units), many of the standard sources of
+misspecification in panel data — unmodelled unit effects, common shocks, trending
+confounders — have been captured by the model.
+
+However, clean residuals are a *specification check*, not a validation of causal
+identification. Conditional exchangeability and parallel trends are restrictions
+on the conditional mean of potential outcomes and treatment assignment — not
+second-moment properties of fitted residuals. Several important threats can
+produce clean residuals while still violating identification assumptions:
+
+- **Idiosyncratic policy endogeneity.** Treatment may respond to a
+  contemporaneous shock that is iid across units and time, invisible to the
+  econometrician but correlated with outcomes. No residual dependence signature.
+- **Anticipation and mean reversion.** Ashenfelter-type dips or anticipatory
+  behavioural responses violate parallel trends without necessarily generating
+  detectable residual autocorrelation.
+- **Overfitting.** A sufficiently flexible learner can mechanically whiten
+  residuals by absorbing outcome variation, without this implying anything about
+  the relationship between treatment assignment and counterfactual outcomes.
+
+In macro panel settings, many of the *practically important* confounders — unit
+effects, common shocks, slow-moving institutional differences — do leave
+fingerprints in the residual correlation structure, so the diagnostic has real
+value as a necessary condition. But it is not sufficient. The more informative
+diagnostics for causal claims remain design-based: pre-treatment placebo tests,
+event-study heterogeneity by cohort and relative time, sensitivity to
+alternative control groups, and overlap checks within forest leaves.
+
+## Global Residualization Is Insufficient
+
+When standard forests are not flexible enough to absorb FE through covariates
+alone, the obvious fix is to demean globally: compute $\tilde{Y}_{it} = Y_{it} -
+\hat{\alpha}_i - \hat{\gamma}_t$ and feed the residuals into a standard causal
+forest. This helps, but it does not fully solve the problem.
+
+The issue is *selection-induced local imbalance*. Recursive partitioning selects
+subsamples that are non-representative of the full data. If node $\mathcal{N}$
+happens to contain mostly high-$\alpha_i$ units, the global residualization —
+which was orthogonal with respect to the full sample — need not preserve
+orthogonality within the selected node. The splitting criterion can then exploit
+local composition patterns, attributing residual variation to treatment effect
+heterogeneity when it is actually fixed effect leakage.
+
+In the Monte Carlo experiments of Kattenberg et al. (2023), global
+residualization produces materially biased estimates of $\tau(x)$ in settings
+with strong fixed effects. This motivates the CFFE approach.
+
+---
+
+# The CFFE Methodology
+
+## Core Idea: Node-Level Orthogonalization
+
+The key insight is simple once stated: *residualize within each node, not
+globally*. At every candidate split during tree construction, CFFE re-estimates
+the fixed effects using only the observations in the current node and removes
+them before evaluating the split criterion.
+
+Formally, within node $\mathcal{N}$, define:
+
+$$
+\tilde{Y}_{it}^{\mathcal{N}} = Y_{it} - \hat{\alpha}_i^{\mathcal{N}} - \hat{\gamma}_t^{\mathcal{N}}
+$$ {#eq-resid-y}
+
+$$
+\tilde{D}_{it}^{\mathcal{N}} = D_{it} - \hat{\delta}_i^{\mathcal{N}} - \hat{\eta}_t^{\mathcal{N}}
+$$ {#eq-resid-d}
+
+where the fixed effects $\hat{\alpha}_i^{\mathcal{N}}$,
+$\hat{\gamma}_t^{\mathcal{N}}$, $\hat{\delta}_i^{\mathcal{N}}$, and
+$\hat{\eta}_t^{\mathcal{N}}$ are estimated using only observations
+$(i,t) \in \mathcal{N}$.
+
+This is the key move. Because the fixed effects are re-estimated within each
+node, the residuals are purged of between-node composition effects that would
+otherwise contaminate the splitting criterion. Under the maintained identification
+assumptions (conditional parallel trends, no anticipation, overlap), this
+substantially reduces the risk that splits reflect nuisance variation rather than
+treatment effect heterogeneity.
+
+Node-level residualization requires sufficient support within each node: enough
+distinct units and time periods for the two-way FE to be estimable, and nonzero
+residualized treatment variation after demeaning. In practice, this means the
+minimum leaf size constraint should be thought of in terms of *clusters and
+periods*, not just total observations.
+
+## The Iterative Demeaning Algorithm
+
+Estimating two-way fixed effects within a node is a standard linear algebra
+problem, solved by alternating projections (iterative demeaning):
+
+**Step 1.** Initialize: $\tilde{Y}_{it}^{(0)} = Y_{it}$
+
+**Step 2.** Demean by unit within the node:
+$$
+\tilde{Y}_{it}^{(k+1/2)} = \tilde{Y}_{it}^{(k)} - \bar{\tilde{Y}}_{i \cdot}^{(k)}
+$$ {#eq-demean-unit}
+
+**Step 3.** Demean by time within the node:
+$$
+\tilde{Y}_{it}^{(k+1)} = \tilde{Y}_{it}^{(k+1/2)} - \bar{\tilde{Y}}_{\cdot t}^{(k+1/2)}
+$$ {#eq-demean-time}
+
+**Step 4.** Repeat Steps 2--3 until convergence (typically 3--5 iterations).
+
+The same procedure is applied to $D_{it}$ to produce $\tilde{D}_{it}^{\mathcal{N}}$.
+
+## Local Treatment Effect Estimation
+
+Within a node, the treatment effect is estimated by regressing the residualized
+outcome on the residualized treatment:
+
+$$
+\hat{\tau}_{\mathcal{N}} = \frac{\sum_{(i,t) \in \mathcal{N}} \tilde{D}_{it} \tilde{Y}_{it}}{\sum_{(i,t) \in \mathcal{N}} \tilde{D}_{it}^2}
+$$ {#eq-tau-local}
+
+By the Frisch-Waugh-Lovell theorem, this is numerically identical to the
+coefficient from the full within-node regression with fixed effects included.
+Note that this is a local linear projection coefficient — its causal
+interpretation as a treatment effect depends on the maintained DiD identification
+assumptions holding within the node. When within-node residualized treatment
+variation $\sum \tilde{D}_{it}^2$ is small (e.g., because treatment is nearly
+absorbed by unit and time effects), the estimate becomes unstable.
+
+## The Splitting Criterion
+
+Trees are grown by selecting the split that maximizes $\tau$-heterogeneity
+across child nodes. For candidate split $S$ partitioning $\mathcal{N}$ into
+$\mathcal{L}$ and $\mathcal{R}$:
+
+$$
+\Delta(S) = \frac{n_{\mathcal{L}} \cdot n_{\mathcal{R}}}{n^2}
+\left(\hat{\tau}_{\mathcal{L}} - \hat{\tau}_{\mathcal{R}}\right)^2
+$$ {#eq-split-cffe}
+
+where $\hat{\tau}_{\mathcal{L}}$ and $\hat{\tau}_{\mathcal{R}}$ are computed
+using node-level residualized values per @eq-tau-local. The weighting term
+$n_{\mathcal{L}} \cdot n_{\mathcal{R}} / n^2$ penalizes unbalanced splits.
+
+Critically, the residualization must be re-performed for each candidate child
+node — the fixed effects in $\mathcal{L}$ differ from those in $\mathcal{R}$.
+This is what makes CFFE computationally more expensive than standard causal
+forests.
+
+## Honest Estimation
+
+Following Wager and Athey (2018), CFFE uses *honest* estimation to prevent
+overfitting and ensure valid inference:
+
+1. The subsample for each tree is split into a **structure sample** (determines
+   the tree topology) and an **estimation sample** (computes final leaf-level
+   treatment effects).
+2. The structure sample is used for all splitting decisions.
+3. Once the tree is fully grown, the estimation sample observations fall into
+   leaves, and $\hat{\tau}$ is computed in each leaf using only estimation sample
+   data.
+
+Sample splitting is performed at the **unit level**: if unit $i$ is assigned to
+the structure sample, *all* of unit $i$'s time-period observations go to the
+structure sample. This preserves the panel dependence structure and prevents
+information leakage across the split.
+
+## Cluster-Aware Subsampling
+
+Each tree in the forest is grown on a random subsample of the data. Subsampling
+is performed at the unit level:
+
+- A fraction of units (default: 50%) is drawn with replacement
+- All observations from each selected unit are included
+- This respects the within-unit dependence induced by fixed effects
+- It enables proper variance estimation that accounts for within-unit correlation
+
+## Variance Estimation and Inference
+
+Confidence intervals use the half-sample variance estimator adapted from Wager
+and Athey (2018). The forest is conceptually split into two halves, and the
+variance is estimated from the disagreement between half-forest predictions:
+
+$$
+\hat{V}[\hat{\tau}(x)] = \text{Var}\left(\hat{\tau}^{(1)}(x), \hat{\tau}^{(2)}(x)\right)
+$$ {#eq-variance}
+
+For significance level $\alpha$, the method returns $(1-\alpha)$ confidence
+intervals. A known limitation: coverage tends to fall below the nominal 95%
+level (see @sec-monte-carlo), so intervals should be treated as approximate
+rather than exact.
+
+---
+
+# Comparison with Related Methods {#sec-comparison}
+
+| Feature | TWFE | Callaway--Sant'Anna | Standard CF | CFFE |
+|---------|------|---------------------|-------------|------|
+| Heterogeneous effects | No | Structured (group/time) | Full nonparametric | Full nonparametric |
+| Panel fixed effects | Yes | Yes | Not designed for FE | Yes |
+| Staggered adoption | Problematic under HTE | Valid | Requires adaptation | Valid under DiD assumptions |
+| Nonparametric $\tau(x)$ | No | No | Yes | Yes |
+| Confidence intervals | Yes | Yes | Yes | Approximate (undercoverage) |
+
+: Comparison of treatment effect estimators for panel data {#tbl-comparison}
+
+TWFE gives one number (and a potentially misleading one under staggered
+adoption). Callaway--Sant'Anna gives clean group-time average effects and
+supports structured heterogeneity analysis, but not the full nonparametric
+$\tau(x)$ function. Standard causal forests give $\tau(x)$ but are not designed
+for panel structure and produce unreliable estimates when unit/time effects are
+present. CFFE is among the first methods to deliver nonparametric heterogeneous
+treatment effects in a difference-in-differences design with two-way fixed
+effects — alongside the DiD-BCF approach, which takes a Bayesian route to the
+same problem.
+
+The closest competitor is the Difference-in-Differences Bayesian Causal Forest
+(DiD-BCF), which takes a Bayesian nonparametric approach to the same problem.
+CFFE is frequentist and computationally lighter; DiD-BCF provides full posterior
+distributions but at greater computational cost.
+
+---
+
+# Monte Carlo Evidence {#sec-monte-carlo}
+
+Aytug (2026) reports simulations with $N = 200$ units, $T = 6$ periods, and 100
+replications across three data-generating processes.
+
+| Scenario | True $\tau$ | Mean $\hat{\tau}$ | RMSE | Correlation | Coverage |
+|----------|-------------|-------------------|------|-------------|----------|
+| Placebo | 0 | $-$0.061 | 0.251 | --- | 56.2% |
+| Homogeneous | 2 | 1.788 | 0.337 | --- | 47.4% |
+| Heterogeneous | $x_1$ | $-$0.012 | 0.539 | 0.904 | 42.7% |
+
+: Monte Carlo simulation results (200 units, 6 periods, 100 replications) {#tbl-monte-carlo}
+
+Three results stand out. First, under the placebo DGP, the mean estimate is
+close to zero ($-$0.061), suggesting the method does not systematically generate
+spurious average effects — though RMSE of 0.251 and coverage of 56.2% indicate
+non-trivial finite-sample noise even under the null. A fuller placebo diagnostic
+would examine the dispersion of estimated CATEs and false discovery rates, not
+just the mean. Second, the heterogeneous case shows a correlation of 0.904
+between estimated and true effects, demonstrating useful *ranking* information:
+the method broadly identifies who benefits more and who benefits less, even if
+magnitudes carry some bias (mean estimate $-$0.012 vs. true mean of zero for
+$x_1$). Third, coverage is well below the nominal 95% across all scenarios,
+ranging from 43% to 56%. This likely reflects not just variance underestimation
+but broader finite-sample instability.
+
+The practical implication: the point estimates and rankings contain real signal,
+but should be interpreted with appropriate caution — particularly in small
+samples. The confidence intervals are unreliable and should not be used for
+formal hypothesis testing without further refinement.
+
+---
+
+# Empirical Applications
+
+## Minimum Wage and Teen Employment
+
+Aytug (2026) applies CFFE to 500 U.S. counties over 2003--2007 with staggered
+minimum wage adoption. The outcome is log teen employment.
+
+| Method | ATT Estimate |
+|--------|--------------|
+| TWFE | $-$0.037 |
+| Callaway--Sant'Anna | $-$0.035 |
+| CFFE | $-$0.042 |
+
+: Minimum wage ATT estimates across methods {#tbl-minwage}
+
+All three approaches converge on a small negative effect around $-$0.04. But
+CFFE estimates heterogeneous effects ranging from $-$0.10 to $+$0.15 across
+county characteristics — suggesting substantial variation that the average
+obscures. Whether these subgroup-level estimates reflect genuine causal
+heterogeneity or finite-sample noise requires further validation (e.g.,
+sample-split stability, placebo heterogeneity tests), but the pattern is
+suggestive and the range is economically meaningful.
+
+## Payrolling and Wages in the Netherlands
+
+Kattenberg et al. (2023) apply CFFE to alternative work arrangements
+(payrolling) and hourly wages in the Netherlands. The headline finding: wages
+fell by **3.7 percent in the first year of payrolling for a specific subgroup of
+workers only**. Conventional subgroup analyses — the standard practice of
+interacting treatment with a handful of pre-specified covariates — missed this
+entirely. The effect was not detected by standard pre-specified subgroup analyses
+and only emerged through the forest's nonparametric search.
+
+This is the methodological payoff. CFFE does not require the researcher to
+specify in advance which subgroups matter. The algorithm discovers them.
+
+---
+
+# Software Implementation
+
+The `causalfe` Python package provides a complete implementation.
+
+**Installation:**
+
+```bash
+pip install git+https://github.com/haytug/causalfe.git
+```
+
+**Usage:**
+
+```python
+from causalfe import CFFEForest
+
+model = CFFEForest(
+    n_trees=100,     # number of trees in the forest
+    max_depth=5,     # maximum tree depth
+    min_leaf=20,     # minimum observations per leaf
+    honest=True,     # honest sample splitting
+    subsample_ratio=0.5  # unit-level subsampling
+)
+
+model.fit(X, Y, D, unit, time)
+
+# Point estimates
+tau_hat = model.predict(X_new)
+
+# Confidence intervals (treat as approximate)
+tau_lower, tau_upper = model.predict_interval(X_new, alpha=0.05)
+```
+
+The original R implementation by Kattenberg et al. is also publicly available.
+
+---
+
+# Limitations and Open Questions
+
+**Coverage.** The confidence intervals do not achieve nominal coverage.
+Improving the variance estimator — perhaps via bootstrap or jackknife approaches
+adapted for the panel setting — is the most pressing technical challenge.
+
+**Balanced panels.** The current implementation requires balanced panels. Many
+empirical settings involve unbalanced panels with entry, exit, and missing
+observations.
+
+**Computational cost.** Node-level residualization at every candidate split is
+expensive. For large panels with many units, periods, and covariates, scaling
+remains a challenge. Parallel computing and approximation strategies could help.
+
+**Identification assumptions.** Like all DiD methods, CFFE requires conditional
+parallel trends, no anticipation, and a well-defined treatment timing structure.
+It does not test or relax these assumptions; it takes them as given. Under
+staggered adoption, the precise estimand — whether a cohort-time-specific CATE,
+a conditional ATT, or some weighted average — should be defined carefully. The
+method does not currently distinguish dynamic treatment effects (effects that
+evolve with time since treatment) from cross-sectional heterogeneity.
+
+**Within-node support.** Node-level FE residualization requires sufficient
+within-node variation: enough distinct units and time periods for two-way FE
+estimation, and nonzero residualized treatment variation. When treatment is
+highly persistent or nearly absorbed by unit/time effects within a node, the
+denominator of the local estimator becomes small and estimates unstable. The
+`min_leaf` parameter should be set with cluster and period counts in mind, not
+just total observations.
+
+**Continuous treatments.** The current framework handles binary treatment only.
+Extending to continuous or multi-valued treatments would broaden applicability
+substantially.
+
+**Tuning sensitivity.** Results can be sensitive to tuning parameters — minimum
+leaf size, maximum tree depth, honesty fraction, and subsample ratio. Reporting
+stability across a range of tuning choices is advisable.
+
+---
+
+# Conclusions
+
+CFFE fills a genuine gap in the causal ML toolkit. Before this method, you could
+have heterogeneous treatment effects (causal forests) or panel data with fixed
+effects (TWFE/DiD), but not both. CFFE delivers both through a single elegant
+idea: residualize within the node, not globally.
+
+The practical value is in revealing distributional heterogeneity that standard
+methods miss. The Dutch payrolling study is the clearest illustration: a 3.7%
+wage cut hitting a specific subgroup, invisible to conventional analysis. For
+policy evaluation — where the question is not just "does it work on average?"
+but "for whom does it work and for whom does it fail?" — this is exactly the
+tool that was missing.
+
+The method is young. Confidence interval coverage needs work. The software is
+functional but not yet battle-tested at scale. But the core idea is sound, the
+Monte Carlo evidence is encouraging, and the empirical applications demonstrate
+real value. For anyone working with panel data and heterogeneous treatment
+effects, CFFE belongs in the toolkit.
+
+---
+
+# References {.unnumbered}
+
+- Aytug, H. (2026). "causalfe: Causal Forests with Fixed Effects in Python." arXiv:2601.10555.
+- Callaway, B. and P.H.C. Sant'Anna (2021). "Difference-in-Differences with Multiple Time Periods." *Journal of Econometrics*, 225(2), 200--230.
+- de Chaisemartin, C. and X. d'Haultfoeuille (2020). "Two-Way Fixed Effects Estimators with Heterogeneous Treatment Effects." *American Economic Review*, 110(9), 2964--2996.
+- Kattenberg, M., B. Scheer, and J. Thiel (2023). "Causal Forests with Fixed Effects for Treatment Effect Heterogeneity in Difference-in-Differences." CPB Discussion Paper 452.
+- Sun, L. and S. Abraham (2021). "Estimating Dynamic Treatment Effects in Event Studies with Heterogeneous Treatment Effects." *Journal of Econometrics*, 225(2), 175--199.
+- Wager, S. and S. Athey (2018). "Estimation and Inference of Heterogeneous Treatment Effects using Random Forests." *Journal of the American Statistical Association*, 113(523), 1228--1242.
